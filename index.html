@@ -171,7 +171,7 @@
     <!-- DATABASE -->
     <div class="pane active" id="pane-db">
       <div class="url-bar">
-        <input type="text" id="dbUrlInput" placeholder="Paste a product URL to add directly…"/>
+        <input type="text" id="dbUrlInput" placeholder="e.g. Selkirk Boomstick, Joola Ben Johns, TaylorMade Qi10…"/>
         <button class="btn btn-primary" onclick="handleAddUrl()" id="addBtn"><i class="ti ti-sparkles"></i> Extract & add</button>
         <button class="btn" onclick="openEdit(-1)"><i class="ti ti-plus"></i> Add manually</button>
       </div>
@@ -291,13 +291,13 @@
 
 <script>
 // ── API — routes through your Vercel backend at /api/extract ──────────────────
-async function callAI(prompt, maxTokens, useWebSearch) {
+async function callAI(prompt, maxTokens, useWebSearch, fetchUrl) {
   maxTokens = maxTokens || 1200;
-  useWebSearch = useWebSearch !== false; // default true
+  useWebSearch = useWebSearch !== false;
   const response = await fetch('/api/extract', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, maxTokens, useWebSearch })
+    body: JSON.stringify({ prompt, maxTokens, useWebSearch, fetchUrl: fetchUrl || null })
   });
   const data = await response.json();
   if (!response.ok || data.error) throw new Error(data.error || 'API call failed');
@@ -459,20 +459,25 @@ function doSort(key){
   renderTable();
 }
 
-// ── ADD FROM URL ──────────────────────────────────────────────────────────────
+// ── ADD BY NAME SEARCH ────────────────────────────────────────────────────────
 async function handleAddUrl(){
-  const url=document.getElementById('dbUrlInput').value.trim();
-  if(!url.startsWith('http')){showToast('Please paste a valid URL');return;}
+  const query=document.getElementById('dbUrlInput').value.trim();
+  if(!query){showToast('Please enter a product name');return;}
   const btn=document.getElementById('addBtn');
-  btn.innerHTML='<span class="spinner"></span> Extracting…';btn.disabled=true;
-  let extracted={type:'pickleball',brand:'',model:'',source_url:url};
+  btn.innerHTML='<span class="spinner"></span> Searching…';btn.disabled=true;
+  let extracted={type:'pickleball',brand:'',model:''};
   try{
     const text=await callAI(
-      `Extract specs for this product URL: ${url}\nRespond ONLY with valid JSON, no markdown:\n{"type":"pickleball"|"golf"|"gear","brand":string,"model":string,"price":number|null,"source_url":"${url}","weight_oz":number|null,"swing_weight":string|null,"twist_weight":number|null,"balance_mm":number|null,"core_thickness":number|null,"grip_size":string|null,"shape":string|null,"surface":string|null,"face_material":string|null,"handle_length_in":number|null,"club_type":string|null,"loft_deg":number|null,"shaft_flex":string|null,"shaft_material":string|null,"length_in":number|null,"head_size_cc":number|null,"hand":string|null,"lie_angle":number|null,"gear_category":string|null,"sport":string|null,"color":string|null,"size":string|null,"material":string|null,"weight_lbs":number|null,"waterproof":string|null,"warranty":string|null,"notes":string|null}`,
-      1200, true
+      `You are a sports equipment expert. Look up this product by name and extract its full specs: "${query}"
+
+Identify if it is pickleball, golf, or other gear. Use your knowledge and web search to fill in as many fields as possible.
+
+Respond ONLY with valid JSON, no markdown:
+{"type":"pickleball"|"golf"|"gear","brand":string,"model":string,"price":number|null,"source_url":string|null,"weight_oz":number|null,"swing_weight":string|null,"twist_weight":number|null,"balance_mm":number|null,"core_thickness":number|null,"grip_size":string|null,"shape":string|null,"surface":string|null,"face_material":string|null,"handle_length_in":number|null,"club_type":string|null,"loft_deg":number|null,"shaft_flex":string|null,"shaft_material":string|null,"length_in":number|null,"head_size_cc":number|null,"hand":string|null,"lie_angle":number|null,"gear_category":string|null,"sport":string|null,"color":string|null,"size":string|null,"material":string|null,"weight_lbs":number|null,"waterproof":string|null,"warranty":string|null,"notes":string|null}`,
+      1200, true, null
     );
     extracted=JSON.parse(text.replace(/```json|```/g,'').trim());
-  }catch(e){showToast('AI extraction failed — fill in manually');}
+  }catch(e){showToast('Could not find that product — fill in manually');}
   db.push(extracted);saveDb();
   document.getElementById('dbUrlInput').value='';
   renderTable();
@@ -499,8 +504,8 @@ async function handleDiscover(){
   document.getElementById('discResults').innerHTML='<div class="loading-card"><i class="ti ti-article"></i>Reading the post and identifying gear…</div>';
   try{
     const text=await callAI(
-      `You are a sports gear extraction expert. Read this URL: ${url}\n\nExtract EVERY piece of gear mentioned (paddles, clubs, bags, shoes, balls, accessories).\n\nRespond ONLY with valid JSON, no markdown:\n{"source_title":string,"source_type":"reddit"|"blog"|"review"|"forum"|"other","summary":string,"items":[{"type":"pickleball"|"golf"|"gear","brand":string|null,"model":string|null,"price":number|null,"swing_weight":string|null,"twist_weight":number|null,"weight_oz":number|null,"balance_mm":number|null,"core_thickness":number|null,"grip_size":string|null,"shape":string|null,"surface":string|null,"club_type":string|null,"loft_deg":number|null,"shaft_flex":string|null,"shaft_material":string|null,"head_size_cc":number|null,"hand":string|null,"gear_category":string|null,"sport":string|null,"color":string|null,"material":string|null,"recommendation_context":string,"sentiment":"positive"|"neutral"|"negative"|"mixed","product_url":string|null}]}`,
-      4000, true
+      `You are a sports gear extraction expert. Read the page content below from: ${url}\n\nExtract EVERY piece of gear mentioned (paddles, clubs, bags, shoes, balls, accessories).\n\nRespond ONLY with valid JSON, no markdown:\n{"source_title":string,"source_type":"reddit"|"blog"|"review"|"forum"|"other","summary":string,"items":[{"type":"pickleball"|"golf"|"gear","brand":string|null,"model":string|null,"price":number|null,"swing_weight":string|null,"twist_weight":number|null,"weight_oz":number|null,"balance_mm":number|null,"core_thickness":number|null,"grip_size":string|null,"shape":string|null,"surface":string|null,"club_type":string|null,"loft_deg":number|null,"shaft_flex":string|null,"shaft_material":string|null,"head_size_cc":number|null,"hand":string|null,"gear_category":string|null,"sport":string|null,"color":string|null,"material":string|null,"recommendation_context":string,"sentiment":"positive"|"neutral"|"negative"|"mixed","product_url":string|null}]}`,
+      4000, false, url
     );
     const result=JSON.parse(text.replace(/```json|```/g,'').trim());
     const srcId='src_'+Date.now();
