@@ -465,26 +465,40 @@ function showToast(msg){
   setTimeout(()=>t.classList.remove('show'), 2500);
 }
 
-// ── PANES & TABS MANAGER ──────────────────────────────────────────────────────
+// ── PANES & TABS MANAGER (FIXED CLICK INTERACTION) ───────────────────────────
 function showPane(id, el){
   document.querySelectorAll('.pane').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.top-tab').forEach(t=>t.classList.remove('active'));
-  document.getElementById('pane-'+id).classList.add('active');
-  el.classList.add('active');
-  if(id === 'compare') populateCompareDropdowns();
+  
+  const targetPane = document.getElementById('pane-' + id);
+  if(targetPane) {
+    targetPane.classList.add('active');
+  }
+  if(el) {
+    el.classList.add('active');
+  }
+  if(id === 'compare') {
+    populateCompareDropdowns();
+  }
 }
+
 function switchSubTab(tab, el){
   currentSubTab = tab;
   document.querySelectorAll('.sub-tab').forEach(t=>t.classList.remove('active'));
-  el.classList.add('active');
+  if(el) el.classList.add('active');
   sortKey = null; sortDir = 1;
   renderTable();
 }
+
 function switchPerfTab(sport, el){
   document.querySelectorAll('.perf-section').forEach(s=>s.style.display='none');
-  document.getElementById('perf-'+sport).style.display='block';
-  el.parentNode.querySelectorAll('.sub-tab').forEach(t=>t.classList.remove('active'));
-  el.classList.add('active');
+  const targetSection = document.getElementById('perf-'+sport);
+  if(targetSection) targetSection.style.display='block';
+  
+  if(el && el.parentNode) {
+    el.parentNode.querySelectorAll('.sub-tab').forEach(t=>t.classList.remove('active'));
+    el.classList.add('active');
+  }
 }
 
 // ── DATABASE TABLE ENGINE ─────────────────────────────────────────────────────
@@ -499,6 +513,8 @@ function renderTable(){
   const cols = DB_COLS[currentSubTab] || DB_COLS.all;
   const head = document.getElementById('tableHead');
   const body = document.getElementById('tableBody');
+  if(!head || !body) return;
+  
   head.innerHTML = '<tr>' + cols.map(c=>`<th onclick="doSort('${c.key}')">${c.label}<span class="sort-ind">${sortKey===c.key?(sortDir>0?'▲':'▼'):''}</span></th>`).join('') + '<th style="width:70px;"></th></tr>';
   let rows = db.map((item,idx)=>({item,idx})).filter(({item})=>currentSubTab==='all'||item.type===currentSubTab);
   if(sortKey && !['_badge','_url'].includes(sortKey)){
@@ -559,7 +575,7 @@ async function handleAddUrl(){
     const text = await callAI(`Extract specs for this product: ${url}\nRespond ONLY with JSON (no markdown):\n{"type":"pickleball"|"golf"|"gear","brand":string,"model":string,"price":number|null,"source_url":"${url}","weight_oz":number|null,"swing_weight":string|null,"twist_weight":number|null,"balance_mm":number|null,"core_thickness":number|null,"grip_size":string|null,"shape":string|null,"surface":string|null,"face_material":string|null,"handle_length_in":number|null,"club_type":string|null,"loft_deg":number|null,"shaft_flex":string|null,"shaft_material":string|null,"length_in":number|null,"head_size_cc":number|null,"hand":string|null,"lie_angle":number|null,"gear_category":string|null,"sport":string|null,"color":string|null,"size":string|null,"material":string|null,"weight_lbs":number|null,"waterproof":string|null,"warranty":string|null,"notes":string|null,"ai_confidence":"high"|"medium"|"low"}`);
     extracted = JSON.parse(text.replace(/```json|
 ```/g,'').trim());
-  }catch(e){ showToast('AI extraction unready — manual inputs populated'); }
+  }catch(e){ showToast('AI extraction template loaded for edits'); }
   db.push(extracted); saveDb();
   document.getElementById('dbUrlInput').value='';
   renderTable();
@@ -572,7 +588,333 @@ async function handleDiscover(){
   if(!url.startsWith('http')){ showToast('Please paste a valid URL'); return; }
   const btn = document.getElementById('discBtn');
   btn.innerHTML='<span class="spinner"></span> Scanning…'; btn.disabled=true;
-  document.getElementById('discResults').innerHTML=`<div class="loading-card"><i class="ti ti-article"></i>AI scanning thread analytics metrics context…</div>`;
+  document.getElementById('discResults').innerHTML=`<div class="loading-card"><i class="ti ti-article"></i>Reading post assets…</div>`;
   try{
     const text = await callAI(`You are a sports gear extraction expert. Fetch and read this URL: ${url}\n\nIt is a blog post, Reddit thread, or review about pickleball or golf equipment. Extract EVERY piece of gear mentioned.\n\nRespond ONLY with JSON (no markdown):\n{"source_title":string,"source_type":"reddit"|"blog"|"review"|"forum"|"other","summary":string,"items":[{"type":"pickleball"|"golf"|"gear","brand":string|null,"model":string|null,"price":number|null,"swing_weight":string|null,"twist_weight":number|null,"weight_oz":number|null,"balance_mm":number|null,"core_thickness":number|null,"grip_size":string|null,"shape":string|null,"surface":string|null,"club_type":string|null,"loft_deg":number|null,"shaft_flex":string|null,"shaft_material":string|null,"head_size_cc":number|null,"hand":string|null,"gear_category":string|null,"sport":string|null,"color":string|null,"material":string|null,"recommendation_context":string,"sentiment":"positive"|"neutral"|"negative"|"mixed","product_url":string|null}]}`, 4000);
-    const result = JSON.parse(text.replace(/
+    const result = JSON.parse(text.replace(/```json|```/g,'').trim());
+    const srcId = 'src_'+Date.now();
+    discSources.unshift({id:srcId,url,result,addedItems:new Set()});
+    if(!discHistory.find(h=>h.url===url)){
+      discHistory.unshift({url,title:result.source_title||(new URL(url)).hostname});
+      if(discHistory.length>10) discHistory.pop();
+      saveHistory();
+    }
+    renderHistory();
+    renderDiscResults();
+  }catch(e){
+    document.getElementById('discResults').innerHTML=`<div class="loading-card"><i class="ti ti-alert-circle"></i>Endpoint context unreadable.</div>`;
+  }
+  btn.innerHTML='<i class="ti ti-search"></i> Scan for gear'; btn.disabled=false;
+}
+
+function renderDiscResults(){
+  const container = document.getElementById('discResults');
+  if(!container || !discSources.length){ return; }
+  container.innerHTML = discSources.map(src=>{
+    const {id,url,result} = src;
+    const items = result.items||[];
+    const addedCount = src.addedItems.size;
+    return `<div class="source-card">
+      <div class="source-header">
+        <div class="source-meta">
+          <div class="source-title">${result.source_title||url}</div>
+          <div class="source-domain">${url.replace(/^https?:\/\//,'').split('/')[0]}</div>
+          ${result.summary?`<div class="source-summary">${result.summary}</div>`:''}
+        </div>
+        <div class="source-actions">
+          <span class="added-count">${addedCount}/${items.length} added</span>
+          <button class="btn btn-sm" onclick="addAllFromSource('${id}')"><i class="ti ti-plus"></i> Add all</button>
+        </div>
+      </div>
+      <div class="gear-grid">
+        ${items.length ? items.map((item,i)=>{
+          const isAdded = src.addedItems.has(i);
+          const bCls = {pickleball:'badge-pickle',golf:'badge-golf',gear:'badge-gear'}[item.type]||'badge-gear';
+          const bLbl = {pickleball:'Paddle',golf:'Club',gear:'Gear'}[item.type]||'Gear';
+          const specs=[];
+          if(item.price) specs.push({k:'Price',v:'$'+item.price});
+          if(item.swing_weight) specs.push({k:'Swing wt',v:item.swing_weight});
+          if(item.twist_weight) specs.push({k:'Twist wt',v:item.twist_weight});
+          if(item.weight_oz) specs.push({k:'Weight',v:item.weight_oz+' oz'});
+          if(item.core_thickness) specs.push({k:'Core',v:item.core_thickness+' mm'});
+          if(item.surface) specs.push({k:'Surface',v:item.surface});
+          const sentCls={positive:'sent-positive',negative:'sent-negative',neutral:'sent-neutral',mixed:'sent-mixed'}[item.sentiment]||'sent-neutral';
+          return `<div class="gear-card${isAdded?' added':''}">
+            <div class="gear-info">
+              <div class="gear-name">
+                <span class="badge ${bCls}">${bLbl}</span>
+                ${item.brand||''} ${item.model||'Unknown item'}
+                ${item.sentiment?`<span class="sentiment ${sentCls}">${item.sentiment}</span>`:''}
+              </div>
+              ${specs.length?`<div class="gear-specs">${specs.map(s=>`<span class="spec-chip">${s.k}: <strong>${s.v}</strong></span>`).join('')}</div>`:''}
+            </div>
+            <div style="flex-shrink:0;">
+              ${isAdded
+                ?'<span style="font-size:11px;color:var(--c-green);font-weight:500;display:inline-flex;align-items:center;gap:4px;"><i class="ti ti-check"></i> Added</span>'
+                :`<button class="btn btn-success btn-sm" onclick="addDiscItem('${id}',${i})"><i class="ti ti-plus"></i> Add</button>`
+              }
+            </div>
+          </div>`;
+        }).join('') : '<div style="padding:1.5rem;text-align:center;color:var(--c-muted);font-size:13px;">No matching metrics maps inside arrays.</div>'}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function addDiscItem(srcId, itemIdx){
+  const src = discSources.find(s=>s.id===srcId);
+  if(!src||src.addedItems.has(itemIdx)) return;
+  const item = {...src.result.items[itemIdx]};
+  item.source_url = item.product_url || src.url;
+  delete item.recommendation_context; delete item.sentiment; delete item.product_url;
+  db.push(item); saveDb();
+  src.addedItems.add(itemIdx);
+  renderTable(); renderDiscResults();
+  showToast(`${item.brand||''} added`);
+}
+
+function addAllFromSource(srcId){
+  const src = discSources.find(s=>s.id===srcId);
+  if(!src) return;
+  (src.result.items||[]).forEach((_,i)=>{ if(!src.addedItems.has(i)) addDiscItem(srcId,i); });
+}
+
+// ── MANUAL DIALOGUE CONTROL ───────────────────────────────────────────────────
+function openEdit(idx){
+  editIndex = idx;
+  const isNew = idx === -1;
+  if(isNew){ db.push({type:'pickleball',brand:'',model:''}); editIndex=db.length-1; saveDb(); }
+  const item = db[editIndex];
+  document.getElementById('modalTitle').textContent = isNew ? 'Add item' : `Edit Item Data`;
+  document.getElementById('deleteBtn').style.display = isNew ? 'none' : 'inline-flex';
+  buildForm(item);
+  document.getElementById('editOverlay').classList.add('open');
+}
+
+function buildForm(item){
+  const fields = FORM_FIELDS[item.type]||FORM_FIELDS.gear;
+  let html = `<div class="fg full" style="margin-bottom:4px;"><label>Equipment type</label><select id="field_type" onchange="changeType()"><option value="pickleball" ${item.type==='pickleball'?'selected':''}>Pickleball paddle</option><option value="golf" ${item.type==='golf'?'selected':''}>Golf club</option><option value="gear" ${item.type==='gear'?'selected':''}>Other gear</option></select></div>`;
+  let inGrid=false;
+  fields.forEach(f=>{
+    if(f.section){
+      if(inGrid){html+='</div>';inGrid=false;}
+      html+=`<div class="form-section-label">${f.section}</div><div class="form-grid">`;
+      inGrid=true; return;
+    }
+    const val=item[f.key]??'';
+    const cls=f.full?'fg full':'fg';
+    if(f.textarea) html+=`<div class="${cls}"><label>${f.label}</label><textarea id="field_${f.key}" rows="2">${val}</textarea></div>`;
+    else html+=`<div class="${cls}"><label>${f.label}</label><input type="${f.type==='number'?'number':'text'}" id="field_${f.key}" value="${val}" step="any"/></div>`;
+  });
+  if(inGrid) html+='</div>';
+  document.getElementById('formContent').innerHTML=html;
+}
+
+function changeType(){
+  const t=document.getElementById('field_type').value;
+  db[editIndex].type=t; saveDb(); buildForm(db[editIndex]);
+}
+
+function saveModal(){
+  const item=db[editIndex];
+  const fields=FORM_FIELDS[item.type]||FORM_FIELDS.gear;
+  fields.forEach(f=>{
+    if(f.section) return;
+    const el=document.getElementById('field_'+f.key);
+    if(!el) return;
+    item[f.key]=f.type==='number'?(el.value!==''?parseFloat(el.value):null):el.value;
+  });
+  saveDb(); closeModal(); renderTable();
+}
+
+function closeModal(){ document.getElementById('editOverlay').classList.remove('open'); editIndex=null; }
+function handleOverlayClick(e){ if(e.target===e.currentTarget) closeModal(); }
+function deleteItem(idx){ if(confirm('Delete item?')){ db.splice(idx,1); saveDb(); renderTable(); } }
+function deleteFromModal(){ if(editIndex!=null&&confirm('Delete?')){ db.splice(editIndex,1); saveDb(); closeModal(); renderTable(); } }
+
+// ── GOLF PERFORMANCE ENGINE ───────────────────────────────────────────────────
+function saveGolfRound() {
+  const course = document.getElementById('g-course').value.trim() || 'Generic Course';
+  const holes = parseInt(document.getElementById('g-holes').value);
+  const score = parseInt(document.getElementById('g-score').value) || 0;
+  const putts = parseInt(document.getElementById('g-putts').value) || 0;
+  const fway = parseInt(document.getElementById('g-fway').value) || 0;
+  const gir = parseInt(document.getElementById('g-gir').value) || 0;
+
+  golfRounds.push({ id: Date.now(), course, holes, score, putts, fway, gir });
+  saveGolf();
+  showToast('Golf scorecard saved');
+  document.getElementById('g-course').value = '';
+  document.getElementById('g-score').value = '';
+  document.getElementById('g-putts').value = '';
+  document.getElementById('g-fway').value = '';
+  document.getElementById('g-gir').value = '';
+}
+
+function deleteGolfRound(idx) {
+  golfRounds.splice(idx, 1);
+  saveGolf();
+}
+
+function renderGolfTable() {
+  const tbody = document.getElementById('golfTableBody');
+  if(!tbody) return;
+  if(!golfRounds.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="empty-cell">No rounds filed yet.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = golfRounds.map((r, idx) => `<tr>
+    <td style="font-weight:500;">${r.course}</td>
+    <td>${r.holes} Holes</td>
+    <td><strong>${r.score}</strong></td>
+    <td>${r.putts} putts</td>
+    <td>${r.fway} Fways</td>
+    <td>${r.gir} GIR</td>
+    <td><button class="icon-btn danger" onclick="deleteGolfRound(${idx})"><i class="ti ti-trash"></i></button></td>
+  </tr>`).join('');
+}
+
+// ── PICKLEBALL PERFORMANCE ENGINE ─────────────────────────────────────────────
+function savePickleMatch() {
+  const opp = document.getElementById('p-opp').value.trim() || 'Opponent';
+  const score = document.getElementById('p-score').value.trim() || '0-0';
+  const outcome = document.getElementById('p-out').value;
+  const resets = parseInt(document.getElementById('p-resets').value) || 0;
+  const drops = parseInt(document.getElementById('p-drops').value) || 0;
+  const returns = parseInt(document.getElementById('p-returns').value) || 0;
+
+  pickleMatches.push({ id: Date.now(), opp, score, outcome, resets, drops, returns });
+  savePickle();
+  showToast('Match record successfully filed');
+  document.getElementById('p-opp').value = '';
+  document.getElementById('p-score').value = '';
+  document.getElementById('p-resets').value = '';
+  document.getElementById('p-drops').value = '';
+  document.getElementById('p-returns').value = '';
+}
+
+function deletePickleMatch(idx) {
+  pickleMatches.splice(idx, 1);
+  savePickle();
+}
+
+function renderPickleTable() {
+  const tbody = document.getElementById('pickleTableBody');
+  if(!tbody) return;
+  if(!pickleMatches.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="empty-cell">No match analytics logs found.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = pickleMatches.map((m, idx) => `<tr>
+    <td style="font-weight:500;">${m.opp}</td>
+    <td>${m.score}</td>
+    <td><span class="badge ${m.outcome==='Win'?'badge-pickle':'badge-gear'}">${m.outcome}</span></td>
+    <td>${m.resets}</td>
+    <td>${m.drops} missed</td>
+    <td>${m.returns} met</td>
+    <td><button class="icon-btn danger" onclick="deletePickleMatch(${idx})"><i class="ti ti-trash"></i></button></td>
+  </tr>`).join('');
+}
+
+// ── CORE GEAR MATRIX COMPARE CONTROLLER ───────────────────────────────────────
+function populateCompareDropdowns() {
+  const selectA = document.getElementById('compItemA');
+  const selectB = document.getElementById('compItemB');
+  if(!selectA || !selectB) return;
+  
+  const optionsHTML = db.map((item, idx) => 
+    `<option value="${idx}">${item.brand ? item.brand : ''} ${item.model ? item.model : 'Unnamed'} [${item.type}]</option>`
+  ).join('');
+  
+  selectA.innerHTML = `<option value="">Select First Asset</option>` + optionsHTML;
+  selectB.innerHTML = `<option value="">Select Second Asset</option>` + optionsHTML;
+}
+
+function runComparison() {
+  const idxA = document.getElementById('compItemA').value;
+  const idxB = document.getElementById('compItemB').value;
+  const output = document.getElementById('comparisonOutput');
+  if(!output) return;
+
+  if(!idxA || !idxB) {
+    output.innerHTML = `<div class="disc-empty"><i class="ti ti-git-compare"></i><p>Select two matching database items above</p></div>`;
+    return;
+  }
+
+  const itemA = db[idxA];
+  const itemB = db[idxB];
+
+  if(itemA.type !== itemB.type) {
+    output.innerHTML = `<div class="disc-empty" style="color:var(--c-red);"><i class="ti ti-alert-triangle"></i><p>Type Mismatch</p><small>Attributes must match configuration definitions.</small></div>`;
+    return;
+  }
+
+  let fields = [];
+  if(itemA.type === 'pickleball') {
+    fields = [
+      { key: 'price', label: 'Price Tag', lowWins: true },
+      { key: 'weight_oz', label: 'Total Weight (oz)', lowWins: false },
+      { key: 'swing_weight', label: 'Swing Weight', lowWins: false },
+      { key: 'twist_weight', label: 'Twist Weight Stability', lowWins: false },
+      { key: 'core_thickness', label: 'Core Profile (mm)', lowWins: false }
+    ];
+  } else if (itemA.type === 'golf') {
+    fields = [
+      { key: 'price', label: 'Price Tag', lowWins: true },
+      { key: 'loft_deg', label: 'Loft Angles (°)', lowWins: false },
+      { key: 'length_in', label: 'Shaft Length (in)', lowWins: false },
+      { key: 'head_size_cc', label: 'Head Displacement (cc)', lowWins: false },
+      { key: 'lie_angle', label: 'Lie Angle (°)', lowWins: false }
+    ];
+  } else {
+    fields = [{ key: 'price', label: 'Price Tag', lowWins: true }];
+  }
+
+  let html = `<div class="comparison-grid">
+    <div class="comp-col">
+      <h3>${itemA.brand} ${itemA.model}</h3>`;
+      fields.forEach(f => {
+        const valA = parseFloat(itemA[f.key]) || 0;
+        const valB = parseFloat(itemB[f.key]) || 0;
+        let win = false;
+        if(valA !== valB) {
+          win = f.lowWins ? (valA < valB) : (valA > valB);
+        }
+        html += `<div class="comp-cell ${win ? 'highlight-green' : ''}"><strong>${f.label}:</strong> <span>${itemA[f.key] || '—'}</span></div>`;
+      });
+  html += `</div>
+    <div class="comp-col">
+      <h3>${itemB.brand} ${itemB.model}</h3>`;
+      fields.forEach(f => {
+        const valA = parseFloat(itemA[f.key]) || 0;
+        const valB = parseFloat(itemB[f.key]) || 0;
+        let win = false;
+        if(valA !== valB) {
+          win = f.lowWins ? (valB < valA) : (valB > valA);
+        }
+        html += `<div class="comp-cell ${win ? 'highlight-green' : ''}"><strong>${f.label}:</strong> <span>${itemB[f.key] || '—'}</span></div>`;
+      });
+  html += `</div></div>`;
+  output.innerHTML = html;
+}
+
+// ── DATA MANAGEMENT BACKUP CHANNELS ───────────────────────────────────────────
+function exportCSV(){
+  if(!db.length){ showToast('Empty dataset asset logs'); return; }
+  const keys=['type','brand','model','price','swing_weight','twist_weight','weight_oz','balance_mm','core_thickness','surface','source_url'];
+  const escape=v=>v==null?'':'"'+String(v).replace(/"/g,'""')+'"';
+  const csv=[keys.join(','),...db.map(row=>keys.map(k=>escape(row[k])).join(','))].join('\n');
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download='ecosystem-export-'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();
+}
+
+// ── INITIALIZATION BLOCK (SAFE SETUP ROUTINES) ───────────────────────────────
+renderTable();
+renderGolfTable();
+renderPickleTable();
+populateCompareDropdowns();
+</script>
+</body>
+</html>
