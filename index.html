@@ -233,7 +233,6 @@
       <button class="top-tab" onclick="showPane('compare',this)"><i class="ti ti-git-compare"></i> Gear Compare</button>
     </div>
 
-    <!-- DATABASE PANE -->
     <div class="pane active" id="pane-db">
       <div class="url-bar">
         <input type="text" id="dbUrlInput" placeholder="Paste a product URL to add directly…"/>
@@ -260,7 +259,6 @@
       </div>
     </div>
 
-    <!-- DISCOVERY PANE -->
     <div class="pane" id="pane-disc">
       <div class="disc-bar">
         <input type="text" class="disc-input" id="discUrlInput" placeholder="Paste a blog post, Reddit thread, or review URL…"/>
@@ -276,14 +274,12 @@
       </div>
     </div>
 
-    <!-- PERFORMANCE TRACKER PANE -->
     <div class="pane" id="pane-perf">
       <div class="sub-tabs">
         <button class="sub-tab active" onclick="switchPerfTab('golf', this)">Golf Round Logs</button>
         <button class="sub-tab" onclick="switchPerfTab('pickle', this)">Pickleball Match Analytics</button>
       </div>
 
-      <!-- GOLF PERFORMANCE TRACKER -->
       <div id="perf-golf" class="perf-section">
         <div class="split-layout">
           <div class="form-panel">
@@ -309,7 +305,6 @@
         </div>
       </div>
 
-      <!-- PICKLEBALL PERFORMANCE TRACKER -->
       <div id="perf-pickle" class="perf-section" style="display:none;">
         <div class="split-layout">
           <div class="form-panel">
@@ -336,7 +331,6 @@
       </div>
     </div>
 
-    <!-- GEAR COMPARE PANE -->
     <div class="pane" id="pane-compare">
       <div class="url-bar" style="background:var(--c-surface); padding:16px; border-radius:var(--radius-lg); border:0.5px solid var(--c-border);">
         <div class="fg" style="flex:1;"><label>Select First Item</label><select id="compItemA" onchange="runComparison()"></select></div>
@@ -349,7 +343,6 @@
   </div>
 </main>
 
-<!-- EDIT MODAL OVERLAY -->
 <div class="modal-overlay" id="editOverlay" onclick="handleOverlayClick(event)">
   <div class="modal">
     <div class="modal-title" id="modalTitle">Add item</div>
@@ -409,7 +402,7 @@ const FORM_FIELDS = {
     {key:'price',label:'Price ($)',type:'number'},{key:'source_url',label:'Source URL',full:true},
     {section:'Details'},
     {key:'color',label:'Color'},{key:'size',label:'Size'},
-    {key:'material',label:'Material'},{key:'weight_lbs',label:'Weight (lbs)',type:'number'},
+    {key:'material',label:'Material'},{key(--'weight_lbs',label:'Weight (lbs)',type:'number'},
     {key:'waterproof',label:'Waterproof (Yes/No)'},{key:'warranty',label:'Warranty'},
     {key:'notes',label:'Notes',textarea:true,full:true}
   ]
@@ -430,7 +423,7 @@ const DB_COLS = {
     {key:'price',label:'Price ($)',fmt:v=>v!=null?'$'+parseFloat(v).toFixed(2):null},
     {key:'weight_oz',label:'Wt (oz)'},{key:'swing_weight',label:'Swing wt'},
     {key:'twist_weight',label:'Twist wt'},{key:'balance_mm',label:'Balance mm'},
-    {key:'core_thickness',label:'Core mm'},{key(--'surface',label:'Surface'},{key:'_url',label:'Link'}
+    {key:'core_thickness',label:'Core mm'},{key:'surface',label:'Surface'},{key:'_url',label:'Link'}
   ],
   golf:[
     {key:'brand',label:'Brand'},{key:'model',label:'Model'},{key:'club_type',label:'Type'},
@@ -441,7 +434,7 @@ const DB_COLS = {
   gear:[
     {key:'brand',label:'Brand'},{key:'model',label:'Model'},{key:'gear_category',label:'Category'},
     {key:'price',label:'Price ($)',fmt:v=>v!=null?'$'+parseFloat(v).toFixed(2):null},
-    {key:'color',label:'Color'},{key:'size',label(--'Size'},{key:'sport',label:'Sport'},{key:'_url',label:'Link'}
+    {key:'color',label:'Color'},{key:'size',label:'Size'},{key:'sport',label:'Sport'},{key:'_url',label:'Link'}
   ]
 };
 
@@ -572,8 +565,7 @@ async function handleAddUrl(){
   let extracted = {type:'pickleball',brand:'',model:'',source_url:url};
   try{
     const text = await callAI(`Extract specs for this product: ${url}\nRespond ONLY with JSON (no markdown):\n{"type":"pickleball"|"golf"|"gear","brand":string,"model":string,"price":number|null,"source_url":"${url}","weight_oz":number|null,"swing_weight":string|null,"twist_weight":number|null,"balance_mm":number|null,"core_thickness":number|null,"grip_size":string|null,"shape":string|null,"surface":string|null,"face_material":string|null,"handle_length_in":number|null,"club_type":string|null,"loft_deg":number|null,"shaft_flex":string|null,"shaft_material":string|null,"length_in":number|null,"head_size_cc":number|null,"hand":string|null,"lie_angle":number|null,"gear_category":string|null,"sport":string|null,"color":string|null,"size":string|null,"material":string|null,"weight_lbs":number|null,"waterproof":string|null,"warranty":string|null,"notes":string|null,"ai_confidence":"high"|"medium"|"low"}`);
-    extracted = JSON.parse(text.replace(/```json|
-```/g,'').trim());
+    extracted = JSON.parse(text.replace(/```json|```/g,'').trim());
   }catch(e){ showToast('AI ingestion queued — manual edits enabled'); }
   db.push(extracted); saveDb();
   document.getElementById('dbUrlInput').value='';
@@ -594,7 +586,6 @@ async function handleDiscover(){
     const srcId = 'src_'+Date.now();
     discSources.unshift({id:srcId,url,result,addedItems:new Set()});
     
-    // SAFE CLEAN REPLACEMENT INSTEAD OF BROKEN REGEX
     const cleanTitle = result.source_title || "Source Link";
     if(!discHistory.find(h=>h.url===url)){
       discHistory.unshift({url: url, title: cleanTitle});
@@ -614,7 +605,6 @@ function renderHistory(){
   if(!strip) return;
   if(!discHistory.length){ strip.innerHTML=''; return; }
   
-  // SAFE UI STRING BINDING
   strip.innerHTML = '';
   discHistory.slice(0,8).forEach(h => {
     const btn = document.createElement('button');
@@ -689,12 +679,6 @@ function addDiscItem(srcId, itemIdx){
   src.addedItems.add(itemIdx);
   renderTable(); renderDiscResults();
   showToast(`${item.brand||''} added`);
-}
-
-function addAllFromSource(srcId){
-  const src = discSources.find(s=>s.id===srcId);
-  if(!src) return;
-  (src.result.items||[]).forEach((_,i)=>{ if(!src.addedItems.has(i)) addDiscItem(srcId,i); });
 }
 
 // ── MANUAL DIALOGUE CONTROL ───────────────────────────────────────────────────
@@ -884,62 +868,4 @@ function runComparison() {
       { key: 'core_thickness', label: 'Core Profile (mm)', lowWins: false }
     ];
   } else if (itemA.type === 'golf') {
-    fields = [
-      { key: 'price', label: 'Price Tag', lowWins: true },
-      { key: 'loft_deg', label: 'Loft Angles (°)', lowWins: false },
-      { key: 'length_in', label: 'Shaft Length (in)', lowWins: false },
-      { key: 'head_size_cc', label: 'Head Displacement (cc)', lowWins: false },
-      { key: 'lie_angle', label: 'Lie Angle (°)', lowWins: false }
-    ];
-  } else {
-    fields = [{ key: 'price', label: 'Price Tag', lowWins: true }];
-  }
-
-  let html = `<div class="comparison-grid">
-    <div class="comp-col">
-      <h3>${itemA.brand} ${itemA.model}</h3>`;
-      fields.forEach(f => {
-        const valA = parseFloat(itemA[f.key]) || 0;
-        const valB = parseFloat(itemB[f.key]) || 0;
-        let win = false;
-        if(valA !== valB) {
-          win = f.lowWins ? (valA < valB) : (valA > valB);
-        }
-        html += `<div class="comp-cell ${win ? 'highlight-green' : ''}"><strong>${f.label}:</strong> <span>${itemA[f.key] || '—'}</span></div>`;
-      });
-  html += `</div>
-    <div class="comp-col">
-      <h3>${itemB.brand} ${itemB.model}</h3>`;
-      fields.forEach(f => {
-        const valA = parseFloat(itemA[f.key]) || 0;
-        const valB = parseFloat(itemB[f.key]) || 0;
-        let win = false;
-        if(valA !== valB) {
-          win = f.lowWins ? (valB < valA) : (valB > valA);
-        }
-        html += `<div class="comp-cell ${win ? 'highlight-green' : ''}"><strong>${f.label}:</strong> <span>${itemB[f.key] || '—'}</span></div>`;
-      });
-  html += `</div></div>`;
-  output.innerHTML = html;
-}
-
-// ── DATA MANAGEMENT BACKUP CHANNELS ───────────────────────────────────────────
-function exportCSV(){
-  if(!db.length){ showToast('Empty dataset asset logs'); return; }
-  const keys=['type','brand','model','price','swing_weight','twist_weight','weight_oz','balance_mm','core_thickness','surface','source_url'];
-  const escape=v=>v==null?'':'"'+String(v).replace(/"/g,'""')+'"';
-  const csv=[keys.join(','),...db.map(row=>keys.map(k=>escape(row[k])).join(','))].join('\n');
-  const a=document.createElement('a');
-  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
-  a.download='ecosystem-export-'+new Date().toISOString().slice(0,10)+'.csv';
-  a.click();
-}
-
-// ── INITIALIZATION BLOCK (SAFE SETUP ROUTINES) ───────────────────────────────
-renderTable();
-renderGolfTable();
-renderPickleTable();
-populateCompareDropdowns();
-</script>
-</body>
-</html>
+    fields =
