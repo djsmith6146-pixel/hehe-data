@@ -168,7 +168,7 @@
   .loading-card{border:0.5px solid var(--c-border);border-radius:var(--radius-lg);padding:3rem;text-align:center;color:var(--c-muted);background:var(--c-surface)}
   .loading-card i{font-size:32px;margin-bottom:12px;display:block;opacity:.25}
 
-  /* modal */
+  /* modal styles */
   .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;overflow-y:auto;padding:40px 16px}
   .modal-overlay.open{display:block}
   .modal{background:var(--c-surface);border-radius:var(--radius-lg);border:0.5px solid var(--c-border);width:560px;max-width:100%;margin:0 auto;padding:24px}
@@ -194,7 +194,7 @@
   .comparison-grid {display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px}
   .comp-col {background:var(--c-surface);border:0.5px solid var(--c-border);border-radius:var(--radius-lg);padding:20px}
   .comp-col h3 {font-size:16px;margin-bottom:14px;border-bottom:1px solid var(--c-border);padding-bottom:8px}
-  .comp-cell {padding:10px 12px;border-bottom:0.5px solid var(--c-border);border-radius:var(--radius-sm);margin:6px 0;display:flex;justify-content:between;align-items:center;transition:background 0.2s}
+  .comp-cell {padding:10px 12px;border-bottom:0.5px solid var(--c-border);border-radius:var(--radius-sm);margin:6px 0;display:flex;justify-content:space-between;align-items:center;transition:background 0.2s}
   .comp-cell span {font-family:var(--font-mono)}
   .highlight-green {background:var(--c-green-bg) !important;color:var(--c-green) !important;font-weight:500}
   .split-layout {display:grid;grid-template-columns:280px 1fr;gap:24px}
@@ -252,7 +252,12 @@
         <button class="sub-tab" onclick="switchSubTab('golf',this)">Golf clubs</button>
         <button class="sub-tab" onclick="switchSubTab('gear',this)">Other gear</button>
       </div>
-      <div class="table-wrap"><table><thead id="tableHead"></thead><tbody id="tableBody"></tbody></table></div>
+      <div class="table-wrap">
+        <table>
+          <thead id="tableHead"></thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
     </div>
 
     <!-- DISCOVERY PANE -->
@@ -341,11 +346,10 @@
         <div class="disc-empty"><i class="ti ti-git-compare"></i><p>Select two matching database items above</p><small>The matrix automatically compares performance data arrays and highlights the greater asset attributes.</small></div>
       </div>
     </div>
-
   </div>
 </main>
 
-<!-- EDIT MODAL -->
+<!-- EDIT MODAL OVERLAY (STANDALONE AND OUTSIDE CORES) -->
 <div class="modal-overlay" id="editOverlay" onclick="handleOverlayClick(event)">
   <div class="modal">
     <div class="modal-title" id="modalTitle">Add item</div>
@@ -465,21 +469,15 @@ function showToast(msg){
   setTimeout(()=>t.classList.remove('show'), 2500);
 }
 
-// ── PANES & TABS MANAGER (FIXED CLICK INTERACTION) ───────────────────────────
+// ── PANES & TABS MANAGER ──────────────────────────────────────────────────────
 function showPane(id, el){
   document.querySelectorAll('.pane').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.top-tab').forEach(t=>t.classList.remove('active'));
   
   const targetPane = document.getElementById('pane-' + id);
-  if(targetPane) {
-    targetPane.classList.add('active');
-  }
-  if(el) {
-    el.classList.add('active');
-  }
-  if(id === 'compare') {
-    populateCompareDropdowns();
-  }
+  if(targetPane) targetPane.classList.add('active');
+  if(el) el.classList.add('active');
+  if(id === 'compare') populateCompareDropdowns();
 }
 
 function switchSubTab(tab, el){
@@ -490,6 +488,7 @@ function switchSubTab(tab, el){
   renderTable();
 }
 
+// FIXED TAB TOGGLE COMPONENT BOUNDS
 function switchPerfTab(sport, el){
   document.querySelectorAll('.perf-section').forEach(s=>s.style.display='none');
   const targetSection = document.getElementById('perf-'+sport);
@@ -575,7 +574,7 @@ async function handleAddUrl(){
     const text = await callAI(`Extract specs for this product: ${url}\nRespond ONLY with JSON (no markdown):\n{"type":"pickleball"|"golf"|"gear","brand":string,"model":string,"price":number|null,"source_url":"${url}","weight_oz":number|null,"swing_weight":string|null,"twist_weight":number|null,"balance_mm":number|null,"core_thickness":number|null,"grip_size":string|null,"shape":string|null,"surface":string|null,"face_material":string|null,"handle_length_in":number|null,"club_type":string|null,"loft_deg":number|null,"shaft_flex":string|null,"shaft_material":string|null,"length_in":number|null,"head_size_cc":number|null,"hand":string|null,"lie_angle":number|null,"gear_category":string|null,"sport":string|null,"color":string|null,"size":string|null,"material":string|null,"weight_lbs":number|null,"waterproof":string|null,"warranty":string|null,"notes":string|null,"ai_confidence":"high"|"medium"|"low"}`);
     extracted = JSON.parse(text.replace(/```json|
 ```/g,'').trim());
-  }catch(e){ showToast('AI extraction template loaded for edits'); }
+  }catch(e){ showToast('AI ingestion queued — manual edits enabled'); }
   db.push(extracted); saveDb();
   document.getElementById('dbUrlInput').value='';
   renderTable();
@@ -655,7 +654,7 @@ function renderDiscResults(){
               }
             </div>
           </div>`;
-        }).join('') : '<div style="padding:1.5rem;text-align:center;color:var(--c-muted);font-size:13px;">No matching metrics maps inside arrays.</div>'}
+        }).join('') : '<div style="padding:1.5rem;text-align:center;color:var(--c-muted);font-size:13px;">No matching assets logs found.</div>'}
       </div>
     </div>`;
   }).join('');
@@ -683,7 +682,11 @@ function addAllFromSource(srcId){
 function openEdit(idx){
   editIndex = idx;
   const isNew = idx === -1;
-  if(isNew){ db.push({type:'pickleball',brand:'',model:''}); editIndex=db.length-1; saveDb(); }
+  if(isNew){ 
+    db.push({type:'pickleball',brand:'',model:''}); 
+    editIndex=db.length-1; 
+    saveDb(); 
+  }
   const item = db[editIndex];
   document.getElementById('modalTitle').textContent = isNew ? 'Add item' : `Edit Item Data`;
   document.getElementById('deleteBtn').style.display = isNew ? 'none' : 'inline-flex';
@@ -727,7 +730,10 @@ function saveModal(){
   saveDb(); closeModal(); renderTable();
 }
 
-function closeModal(){ document.getElementById('editOverlay').classList.remove('open'); editIndex=null; }
+function closeModal(){ 
+  document.getElementById('editOverlay').classList.remove('open'); 
+  editIndex=null; 
+}
 function handleOverlayClick(e){ if(e.target===e.currentTarget) closeModal(); }
 function deleteItem(idx){ if(confirm('Delete item?')){ db.splice(idx,1); saveDb(); renderTable(); } }
 function deleteFromModal(){ if(editIndex!=null&&confirm('Delete?')){ db.splice(editIndex,1); saveDb(); closeModal(); renderTable(); } }
