@@ -349,7 +349,7 @@
   </div>
 </main>
 
-<!-- EDIT MODAL OVERLAY (STANDALONE AND OUTSIDE CORES) -->
+<!-- EDIT MODAL OVERLAY -->
 <div class="modal-overlay" id="editOverlay" onclick="handleOverlayClick(event)">
   <div class="modal">
     <div class="modal-title" id="modalTitle">Add item</div>
@@ -430,7 +430,7 @@ const DB_COLS = {
     {key:'price',label:'Price ($)',fmt:v=>v!=null?'$'+parseFloat(v).toFixed(2):null},
     {key:'weight_oz',label:'Wt (oz)'},{key:'swing_weight',label:'Swing wt'},
     {key:'twist_weight',label:'Twist wt'},{key:'balance_mm',label:'Balance mm'},
-    {key:'core_thickness',label:'Core mm'},{key:'surface',label:'Surface'},{key:'_url',label:'Link'}
+    {key:'core_thickness',label:'Core mm'},{key(--'surface',label:'Surface'},{key:'_url',label:'Link'}
   ],
   golf:[
     {key:'brand',label:'Brand'},{key:'model',label:'Model'},{key:'club_type',label:'Type'},
@@ -441,7 +441,7 @@ const DB_COLS = {
   gear:[
     {key:'brand',label:'Brand'},{key:'model',label:'Model'},{key:'gear_category',label:'Category'},
     {key:'price',label:'Price ($)',fmt:v=>v!=null?'$'+parseFloat(v).toFixed(2):null},
-    {key:'color',label:'Color'},{key:'size',label:'Size'},{key:'sport',label:'Sport'},{key:'_url',label:'Link'}
+    {key:'color',label:'Color'},{key:'size',label(--'Size'},{key:'sport',label:'Sport'},{key:'_url',label:'Link'}
   ]
 };
 
@@ -465,8 +465,7 @@ function saveHistory(){ try{ localStorage.setItem('disc_history', JSON.stringify
 
 function showToast(msg){
   const t = document.getElementById('toast');
-  t.textContent = msg; t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'), 2500);
+  if(t) { t.textContent = msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2500); }
 }
 
 // ── PANES & TABS MANAGER ──────────────────────────────────────────────────────
@@ -488,7 +487,6 @@ function switchSubTab(tab, el){
   renderTable();
 }
 
-// FIXED TAB TOGGLE COMPONENT BOUNDS
 function switchPerfTab(sport, el){
   document.querySelectorAll('.perf-section').forEach(s=>s.style.display='none');
   const targetSection = document.getElementById('perf-'+sport);
@@ -502,7 +500,9 @@ function switchPerfTab(sport, el){
 
 // ── DATABASE TABLE ENGINE ─────────────────────────────────────────────────────
 function updateStats(){
-  document.getElementById('st-total').textContent = db.length;
+  const totalEl = document.getElementById('st-total');
+  if(!totalEl) return;
+  totalEl.textContent = db.length;
   document.getElementById('st-paddles').textContent = db.filter(i=>i.type==='pickleball').length;
   document.getElementById('st-clubs').textContent = db.filter(i=>i.type==='golf').length;
   document.getElementById('st-gear').textContent = db.filter(i=>i.type==='gear').length;
@@ -593,8 +593,11 @@ async function handleDiscover(){
     const result = JSON.parse(text.replace(/```json|```/g,'').trim());
     const srcId = 'src_'+Date.now();
     discSources.unshift({id:srcId,url,result,addedItems:new Set()});
+    
+    // SAFE CLEAN REPLACEMENT INSTEAD OF BROKEN REGEX
+    const cleanTitle = result.source_title || "Source Link";
     if(!discHistory.find(h=>h.url===url)){
-      discHistory.unshift({url,title:result.source_title||(new URL(url)).hostname});
+      discHistory.unshift({url: url, title: cleanTitle});
       if(discHistory.length>10) discHistory.pop();
       saveHistory();
     }
@@ -604,6 +607,22 @@ async function handleDiscover(){
     document.getElementById('discResults').innerHTML=`<div class="loading-card"><i class="ti ti-alert-circle"></i>Endpoint context unreadable.</div>`;
   }
   btn.innerHTML='<i class="ti ti-search"></i> Scan for gear'; btn.disabled=false;
+}
+
+function renderHistory(){
+  const strip = document.getElementById('historyStrip');
+  if(!strip) return;
+  if(!discHistory.length){ strip.innerHTML=''; return; }
+  
+  // SAFE UI STRING BINDING
+  strip.innerHTML = '';
+  discHistory.slice(0,8).forEach(h => {
+    const btn = document.createElement('button');
+    btn.className = 'history-chip';
+    btn.textContent = h.title;
+    btn.onclick = () => { document.getElementById('discUrlInput').value = h.url; handleDiscover(); };
+    strip.appendChild(btn);
+  });
 }
 
 function renderDiscResults(){
