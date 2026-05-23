@@ -535,7 +535,7 @@ function doSort(key){
 
 // ── VERCEL API INTERACTION ────────────────────────────────────────────────────
 async function callAI(prompt, maxTokens=1200){
-  const resp = await fetch('/api/extract',{
+  const resp = await fetch('/api/get-data',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({prompt: prompt, maxTokens: maxTokens})
