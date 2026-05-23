@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -9,7 +8,6 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css"/>
 <style>
-  /* ── REPLACE THIS KEY BEFORE UPLOADING TO GITHUB ── */
   :root {
     --api-key: "";
     --c-bg: #f9f8f6;
@@ -302,9 +300,8 @@
 <div class="toast" id="toast"></div>
 
 <script>
-// ── API KEY ───────────────────────────────────────────────────────────────────
-// Replace the value below with your new Anthropic API key before uploading to GitHub
-const HARDCODED_KEY = "PASTE_YOUR_NEW_API_KEY_HERE";
+// ── API CONFIGURATION ─────────────────────────────────────────────────────────
+const HARDCODED_KEY = "";
 
 function getApiKey(){
   return localStorage.getItem('gear_api_key') || HARDCODED_KEY;
@@ -471,18 +468,26 @@ function doSort(key){
   renderTable();
 }
 
-// ── AI CALL ───────────────────────────────────────────────────────────────────
-async function callAI(prompt, maxTokens=1200){
-  const key = getApiKey();
-  if(!key || key==='PASTE_YOUR_NEW_API_KEY_HERE') throw new Error('No API key');
-  const resp = await fetch('https://api.anthropic.com/v1/messages',{
-    method:'POST',
-    headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-    body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:maxTokens,tools:[{type:'web_search_20250305',name:'web_search'}],messages:[{role:'user',content:prompt}]})
+// ── SECURE VERCEL BACKEND AI CALL ─────────────────────────────────────────────
+async function callAI(prompt, maxTokens = 1200) {
+  const resp = await fetch('/api/extract', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      prompt: prompt,
+      maxTokens: maxTokens
+    })
   });
+
+  if (!resp.ok) {
+    const errData = await resp.json();
+    throw new Error(errData.error || 'Backend extraction failed');
+  }
+
   const data = await resp.json();
-  if(data.error) throw new Error(data.error.message);
-  return data.content.map(b=>b.type==='text'?b.text:'').join('');
+  return data.text;
 }
 
 // ── ADD FROM URL ──────────────────────────────────────────────────────────────
@@ -494,7 +499,8 @@ async function handleAddUrl(){
   let extracted = {type:'pickleball',brand:'',model:'',source_url:url};
   try{
     const text = await callAI(`Extract specs for this product: ${url}\nRespond ONLY with JSON (no markdown):\n{"type":"pickleball"|"golf"|"gear","brand":string,"model":string,"price":number|null,"source_url":"${url}","weight_oz":number|null,"swing_weight":string|null,"twist_weight":number|null,"balance_mm":number|null,"core_thickness":number|null,"grip_size":string|null,"shape":string|null,"surface":string|null,"face_material":string|null,"handle_length_in":number|null,"club_type":string|null,"loft_deg":number|null,"shaft_flex":string|null,"shaft_material":string|null,"length_in":number|null,"head_size_cc":number|null,"hand":string|null,"lie_angle":number|null,"gear_category":string|null,"sport":string|null,"color":string|null,"size":string|null,"material":string|null,"weight_lbs":number|null,"waterproof":string|null,"warranty":string|null,"notes":string|null,"ai_confidence":"high"|"medium"|"low"}`);
-    extracted = JSON.parse(text.replace(/```json|```/g,'').trim());
+    extracted = JSON.parse(text.replace(/```json|
+```/g,'').trim());
   }catch(e){ showToast('AI could not extract — fill in manually'); }
   db.push(extracted); saveDb();
   document.getElementById('dbUrlInput').value='';
@@ -663,6 +669,7 @@ function saveModal(){
   showToast('Item saved');
 }
 
+// ── IMPORT / EXPORT ───────────────────────────────────────────────────────────
 function closeModal(){
   document.getElementById('editOverlay').classList.remove('open');
   editIndex=null;
@@ -678,7 +685,6 @@ function deleteFromModal(){
   if(editIndex!=null&&confirm('Delete this item?')){ db.splice(editIndex,1); saveDb(); closeModal(); renderTable(); showToast('Item deleted'); }
 }
 
-// ── IMPORT / EXPORT ───────────────────────────────────────────────────────────
 function exportCSV(){
   if(!db.length){ showToast('No items to export'); return; }
   const keys=['type','brand','model','price','swing_weight','twist_weight','weight_oz','balance_mm','core_thickness','surface','shape','grip_size','face_material','handle_length_in','club_type','loft_deg','shaft_flex','shaft_material','length_in','head_size_cc','hand','lie_angle','gear_category','sport','color','size','material','weight_lbs','waterproof','warranty','source_url','notes'];
@@ -709,7 +715,7 @@ function importCSV(e){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
-checkApiKey();
+// checkApiKey(); <-- Disabled banner verification since API key resides on the backend secure server
 renderTable();
 renderHistory();
 </script>
